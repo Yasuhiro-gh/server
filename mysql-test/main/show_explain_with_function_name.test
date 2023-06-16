@@ -1,0 +1,39 @@
+DELIMITER //;
+CREATE FUNCTION funcName(i int) RETURNS INT
+BEGIN
+  SELECT sleep(1) INTO @nothing;
+  RETURN i + 1;
+END
+//
+DELIMITER ;//
+
+create table t(x int);
+insert into t values (0),(1),(2),(3);
+
+let $thr1=`select connection_id()`;
+connect (con1, localhost, root,,);
+connection con1;
+let $thr2=`select connection_id()`;
+SET @old_debug= @@session.debug;
+
+#
+#Test SHOW EXPLAIN FOR CONNECTION for simple query
+#
+send select x = funcName(x) from t;
+connection default;
+let $wait_condition= SELECT count(*) > 0 FROM information_schema.processlist;
+--source include/wait_condition.inc
+evalp explain for connection $thr2;
+connection con1;
+reap;
+
+#
+#Same test with FORMAT=JSON
+#
+send select x = funcName(x) from t;
+connection default;
+let $wait_condition= SELECT count(*) > 0 FROM information_schema.processlist;
+--source include/wait_condition.inc
+evalp explain FORMAT=JSON for connection $thr2;
+connection con1;
+reap;

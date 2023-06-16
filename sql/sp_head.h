@@ -1109,6 +1109,7 @@ public:
   uint m_ip;			///< My index
   sp_pcontext *m_ctx;		///< My parse context
   uint m_lineno;
+  sp_head *parent;
 
   /// Should give each a name or type code for debugging purposes?
   sp_instr(uint ip, sp_pcontext *ctx)

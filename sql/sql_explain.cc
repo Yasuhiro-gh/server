@@ -24,6 +24,7 @@
 #include "my_json_writer.h"
 #include "opt_range.h"
 #include "sql_expression_cache.h"
+#include "sp_head.h"
 
 #include <stack>
 
@@ -1056,8 +1057,25 @@ int Explain_select::print_explain(Explain_query *query,
       item_list.push_back(item_null, mem_root);
     }
 
-    item_list.push_back(new (mem_root) Item_string_sys(thd, message),
-                        mem_root);
+    auto current_thd_stmt_arena= dynamic_cast<sp_instr_stmt*>(current_thd->stmt_arena);
+    if (current_thd_stmt_arena && current_thd_stmt_arena->parent->m_name.str)
+    {
+      char str_buf[256];
+      const char* function_name = current_thd_stmt_arena->parent->m_name.str;
+      String message_with_func_name(str_buf, sizeof(str_buf), &my_charset_bin);
+
+      message_with_func_name.length(0);
+      message_with_func_name.append(message, sizeof(message));
+      message_with_func_name.append(STRING_WITH_LEN("; Called from function: "));
+      message_with_func_name.append(function_name, sizeof(function_name));
+
+      item_list.push_back(new (mem_root) Item_string_sys(thd, message_with_func_name.c_ptr()), mem_root);
+    }
+    else
+    {
+      item_list.push_back(new (mem_root) Item_string_sys(thd, message),
+                          mem_root);
+    }
 
     if (output->send_data(item_list))
       return 1;
@@ -1163,6 +1181,13 @@ void Explain_select::print_explain_json(Explain_query *query,
     writer->add_member("select_id").add_ll(select_id);
     add_linkage(writer);
 
+    auto current_thd_stmt_arena= dynamic_cast<sp_instr_stmt*>(current_thd->stmt_arena);
+    if (current_thd_stmt_arena && current_thd_stmt_arena->parent->m_name.str)
+    {
+      auto function_name = current_thd_stmt_arena->parent->m_name.str;
+      writer->add_member ("called from function").add_str(function_name);
+    }
+
     writer->add_member("table").start_object();
     writer->add_member("message").add_str(select_type == pushed_derived_text ?
                                           "Pushed derived" :
@@ -1179,6 +1204,13 @@ void Explain_select::print_explain_json(Explain_query *query,
     writer->add_member("query_block").start_object();
     writer->add_member("select_id").add_ll(select_id);
     add_linkage(writer);
+
+    auto current_thd_stmt_arena= dynamic_cast<sp_instr_stmt*>(current_thd->stmt_arena);
+    if (current_thd_stmt_arena && current_thd_stmt_arena->parent->m_name.str)
+    {
+      auto function_name = current_thd_stmt_arena->parent->m_name.str;
+      writer->add_member ("called from function").add_str(function_name);
+    }
 
     if (cost != 0.0)
       writer->add_member("cost").add_double(cost);
@@ -1740,6 +1772,17 @@ int Explain_table_access::print_explain(select_result_sink *output,
     else
       extra_buf.append(STRING_WITH_LEN("; "));
     extra_buf.append(STRING_WITH_LEN("Using rowid filter"));
+  }
+
+  auto current_thd_stmt_arena= dynamic_cast<sp_instr_stmt*>(current_thd->stmt_arena);
+  if (current_thd_stmt_arena && current_thd_stmt_arena->parent->m_name.str)
+  {
+    if (first)
+      first= false;
+    else
+      extra_buf.append(STRING_WITH_LEN("; Called from function: "));
+    auto function_name= current_thd_stmt_arena->parent->m_name.str;
+    extra_buf.append(function_name, sizeof(function_name));
   }
 
   item_list.push_back(new (mem_root)

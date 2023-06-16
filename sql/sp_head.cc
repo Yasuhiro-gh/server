@@ -1404,6 +1404,7 @@ sp_head::execute(THD *thd, bool merge_da_on_success)
       thd->spcont->quit_func= TRUE;
       break;
     }
+    i->parent= this;
 
     /* Reset number of warnings for this query. */
     thd->get_stmt_da()->reset_for_next_command();
